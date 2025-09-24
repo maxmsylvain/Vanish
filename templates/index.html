@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>Welcome to Vanish</h1>
+    <p class="subtitle">Where posts disappear after 3 hours</p>
+    
+    <div class="hero-description">
+        <p>Share your thoughts, ideas, and moments without the pressure of permanence.</p>
+        <p>Join conversations that are meant to be experienced in the moment, not preserved forever.</p>
+    </div>
+
+    <div class="hero-buttons">
+        <a href="{{ url_for('register') }}" class="button primary">Sign Up</a>
+        <a href="{{ url_for('login') }}" class="button secondary">Log In</a>
+    </div>
+</div>
+
+<section class="features">
+    <div class="feature">
+        <h2>Time Sensitive</h2>
+        <p>All posts vanish after 3 hours, creating a space for authentic, in-the-moment sharing.</p>
+    </div>
+    
+    <div class="feature">
+        <h2>No Pressure</h2>
+        <p>Feel free to express yourself without worrying about your digital footprint.</p>
+    </div>
+    
+    <div class="feature">
+        <h2>Pure Entertainment</h2>
+        <p>Focus on fun, creativity, and genuine connection rather than news or permanent content.</p>
+    </div>
+</section>
+{% endblock %}

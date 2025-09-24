@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}Feed - Vanish{% endblock %}
+
+{% block content %}
+<div class="feed-page">
+    <div class="post-form-container">
+        <form action="{{ url_for('create_post') }}" method="post" class="post-form">
+            <div class="form-group">
+                <textarea name="content" placeholder="What's on your mind? It'll vanish in 3 hours..." required maxlength="500"></textarea>
+            </div>
+            <button type="submit" class="button primary">Post</button>
+        </form>
+    </div>
+    
+    <div class="posts-container">
+        <h2>Latest Posts</h2>
+        
+        {% if posts %}
+            {% for post in posts %}
+                {% if not post.is_reply %}  
+                <div class="post {% if post.post_type == 'bot' %}bot-post{% if 'finance' in post.author.username %} financial{% elif 'politics' in post.author.username %} political{% endif %}{% endif %}" id="post-{{ post.id }}" data-post-id="{{ post.id }}" data-remaining-seconds="{{ post.remaining_time }}">
+                    <div class="post-header">
+                        <a href="{{ url_for('profile', username=post.author.username) }}" class="post-author">
+                            <img src="{{ url_for('static', filename=post.author.profile_pic) }}" alt="{{ post.author.username }}" class="author-avatar">
+                            <span class="author-name">
+                                {{ post.author.username }}
+                                {% if post.post_type == 'bot' %}
+                                    {% if 'finance' in post.author.username %}
+                                        <span class="bot-badge financial">💰</span>
+                                    {% elif 'politics' in post.author.username %}
+                                        <span class="bot-badge political">🏛️</span>
+                                    {% else %}
+                                        <span class="bot-badge general">📰</span>
+                                    {% endif %}
+                                {% endif %}
+                            </span>
+                        </a>
+                        <div class="post-timer">
+                            <span class="timer-icon">⏳</span>
+                            <span class="remaining-time"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="post-content">
+                        {{ post.content }}
+                        {% if post.post_type == 'bot' and post.source_url %}
+                            <div class="news-source">
+                                <a href="{{ post.source_url }}" target="_blank" class="source-link">Read full article </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="post-footer">
+                        <button class="reply-button" data-post-id="{{ post.id }}">Reply</button>
+                        <span class="post-time">{{ post.created_at.strftime('%H:%M') }}</span>
+                    </div>
+
+                    <div class="replies-container" id="replies-{{ post.id }}" style="display: none;">
+                        <div class="replies-content">
+                            
+                        </div>
+                        <button class="toggle-reply-form-button" data-post-id="{{ post.id }}">Add Reply</button>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <div class="no-posts-message">
+                <p>No posts yet! Be the first to share something.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="modal reply-modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h2>Reply</h2>
+        <form action="{{ url_for('create_post') }}" method="post" class="reply-form">
+            <div class="form-group">
+                <textarea name="content" placeholder="Write your reply..." required maxlength="500"></textarea>
+                <div class="char-counter">0/500</div>
+            </div>
+            <input type="hidden" name="parent_id" id="reply-parent-id" value="">
+            <button type="submit" class="button primary">Reply</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function formatRemainingTime(seconds) {
+        if (seconds <= 0) {
+            return "Vanished";
+        }
+
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${secs}s`;
+        } else {
+            return `${secs}s`;
+        }
+    }
+
+    function updateRemainingTimes() {
+        const posts = document.querySelectorAll('.post:not(.vanishing)');
+
+        posts.forEach(post => {
+            const postId = post.dataset.postId;
+            let remainingSeconds = parseFloat(post.dataset.remainingSeconds);
+
+            if (remainingSeconds <= 0) {
+                post.classList.add('vanishing');
+                post.querySelector('.remaining-time').textContent = "Vanished";
+                setTimeout(() => {
+                    post.remove();
+                }, 1000);
+            } else {
+                remainingSeconds -= 1;
+                post.dataset.remainingSeconds = remainingSeconds;
+
+                const timerElement = post.querySelector('.remaining-time');
+                timerElement.textContent = formatRemainingTime(remainingSeconds);
+
+                if (remainingSeconds < 900) {
+                    post.classList.add('urgent');
+                }
+            }
+        });
+        
+        const replies = document.querySelectorAll('.reply-post:not(.vanishing)');
+        replies.forEach(reply => {
+            let remainingSeconds = parseFloat(reply.dataset.remainingSeconds);
+            
+            if (remainingSeconds <= 0) {
+                reply.classList.add('vanishing');
+                reply.querySelector('.remaining-time').textContent = "Vanished";
+                setTimeout(() => {
+                    reply.remove();
+                }, 1000);
+            } else {
+                remainingSeconds -= 1;
+                reply.dataset.remainingSeconds = remainingSeconds;
+
+                const timerElement = reply.querySelector('.remaining-time');
+                timerElement.textContent = formatRemainingTime(remainingSeconds);
+
+                if (remainingSeconds < 900) {
+                    reply.classList.add('urgent');
+                }
+            }
+        });
+    }
+
+    function setupReplyButtons() {
+        const replyButtons = document.querySelectorAll('.reply-button');
+        const replyModal = document.querySelector('.reply-modal');
+        const closeModal = replyModal.querySelector('.close-modal');
+        const replyParentId = document.getElementById('reply-parent-id');
+        
+        const toggleReplyFormButtons = document.querySelectorAll('.toggle-reply-form-button');
+        
+        toggleReplyFormButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const postId = this.dataset.postId;
+                
+                replyParentId.value = postId;
+                
+                replyModal.style.display = 'flex';
+                
+                setTimeout(() => {
+                    replyModal.querySelector('textarea').focus();
+                }, 100);
+            });
+        });
+        
+        replyButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const postId = this.dataset.postId;
+                const repliesContainer = document.getElementById(`replies-${postId}`);
+                
+                if (repliesContainer.style.display === 'none' || repliesContainer.style.display === '') {
+                    loadReplies(postId);
+                } else {
+                    repliesContainer.style.display = 'none';
+                }
+            });
+        });
+        
+        closeModal.addEventListener('click', function() {
+            replyModal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target === replyModal) {
+                replyModal.style.display = 'none';
+            }
+        });
+        
+        const replyTextarea = replyModal.querySelector('textarea');
+        const charCounter = replyModal.querySelector('.char-counter');
+        const maxLength = replyTextarea.getAttribute('maxlength');
+        
+        replyTextarea.addEventListener('input', function() {
+            const currentLength = this.value.length;
+            charCounter.textContent = `${currentLength}/${maxLength}`;
+            
+            if (currentLength > maxLength * 0.8) {
+                charCounter.classList.add('warning');
+            } else {
+                charCounter.classList.remove('warning');
+            }
+        });
+    }
+    
+    function loadReplies(postId) {
+        const repliesContainer = document.getElementById(`replies-${postId}`);
+        const repliesContent = repliesContainer.querySelector('.replies-content');
+        
+        repliesContent.innerHTML = '<div class="loading-replies">Loading replies...</div>';
+        
+        repliesContainer.style.display = 'block';
+        
+        fetch(`/api/post/${postId}/replies`)
+            .then(response => response.json())
+            .then(data => {
+                repliesContent.innerHTML = '';
+                
+                if (data.replies.length === 0) {
+                    repliesContent.innerHTML = '<div class="no-replies">No replies yet</div>';
+                    return;
+                }
+                
+                data.replies.forEach(reply => {
+                    const replyElement = document.createElement('div');
+                    replyElement.className = 'reply-post';
+                    replyElement.dataset.replyId = reply.id;
+                    replyElement.dataset.remainingSeconds = reply.remaining_seconds;
+                    
+                    replyElement.innerHTML = `
+                        <div class="post-header">
+                            <a href="/profile/${reply.author.username}" class="post-author">
+                                <img src="/static/${reply.author.profile_pic}" alt="${reply.author.username}" class="author-avatar">
+                                <span class="author-name">${reply.author.username}</span>
+                            </a>
+                            <div class="post-timer">
+                                <span class="timer-icon">⏳</span>
+                                <span class="remaining-time">${formatRemainingTime(reply.remaining_seconds)}</span>
+                            </div>
+                        </div>
+                        <div class="post-content">
+                            ${reply.content}
+                        </div>
+                        <div class="post-footer">
+                            <span class="post-time">${reply.created_at}</span>
+                        </div>
+                    `;
+                    
+                    repliesContent.appendChild(replyElement);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading replies:', error);
+                repliesContent.innerHTML = '<div class="error-loading">Error loading replies</div>';
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.post').forEach(post => {
+            const remainingSeconds = parseFloat(post.dataset.remainingSeconds);
+            const timerElement = post.querySelector('.remaining-time');
+            timerElement.textContent = formatRemainingTime(remainingSeconds);
+
+            if (remainingSeconds < 900) {
+                post.classList.add('urgent');
+            }
+        });
+
+        setInterval(updateRemainingTimes, 1000);
+        
+        setupReplyButtons();
+        
+        if (window.location.hash) {
+            const postId = window.location.hash.replace('#post-', '');
+            if (postId) {
+                setTimeout(() => {
+                    loadReplies(postId);
+                }, 500);
+            }
+        }
+    });
+</script>
+{% endblock %}

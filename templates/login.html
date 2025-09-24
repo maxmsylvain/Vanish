@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Vanish{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h1>Welcome Back</h1>
+    
+    <form action="{{ url_for('login') }}" method="post" class="auth-form">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required>
+        </div>
+        
+        <button type="submit" class="button primary full-width">Log In</button>
+    </form>
+    
+    <div class="auth-links">
+        <p>Don't have an account? <a href="{{ url_for('register') }}">Sign up</a></p>
+    </div>
+</div>
+{% endblock %}

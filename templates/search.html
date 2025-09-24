@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results - Vanish{% endblock %}
+
+{% block content %}
+<div class="search-results-page">
+    <h1>Search Results for "{{ query }}"</h1>
+    
+    {% if not users and not posts %}
+        <div class="no-results">
+            <p>No results found for "{{ query }}"</p>
+        </div>
+    {% else %}
+        
+        <div class="search-section">
+            <h2>Users</h2>
+            {% if users %}
+                <div class="users-grid">
+                    {% for user in users %}
+                        <div class="user-card">
+                            <div class="user-card-header">
+                                <img src="{{ url_for('static', filename=user.profile_pic) }}" alt="{{ user.username }}" class="user-avatar">
+                                <div class="user-info">
+                                    <a href="{{ url_for('profile', username=user.username) }}" class="user-name">{{ user.username }}</a>
+                                    <span class="joined-date">Joined {{ user.created_at.strftime('%B %Y') }}</span>
+                                </div>
+                            </div>
+                            
+                            {% if user.bio %}
+                                <p class="user-bio">{{ user.bio|truncate(100) }}</p>
+                            {% endif %}
+                            
+                            <div class="user-stats">
+                                <span class="followers-count" data-user-id="{{ user.id }}">Loading...</span>
+                                {% if user.id != current_user.id %}
+                                    <div class="follow-actions" data-user-id="{{ user.id }}">
+                                        {% if current_user.is_following(user) %}
+                                            <a href="{{ url_for('unfollow', username=user.username) }}" class="button secondary unfollow-btn">Unfollow</a>
+                                        {% else %}
+                                            <a href="{{ url_for('follow', username=user.username) }}" class="button primary follow-btn">Follow</a>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="no-section-results">No users found matching "{{ query }}"</p>
+            {% endif %}
+        </div>
+
+        <div class="search-section">
+            <h2>Posts</h2>
+            {% if posts %}
+                <div class="posts-grid">
+                    {% for post in posts %}
+                        <div class="post" data-post-id="{{ post.id }}" data-remaining-seconds="{{ post.remaining_time }}">
+                            <div class="post-header">
+                                <a href="{{ url_for('profile', username=post.author.username) }}" class="post-author">
+                                    <img src="{{ url_for('static', filename=post.author.profile_pic) }}" alt="{{ post.author.username }}" class="author-avatar">
+                                    <span class="author-name">{{ post.author.username }}</span>
+                                </a>
+                                <div class="post-timer">
+                                    <span class="timer-icon">⏳</span>
+                                    <span class="remaining-time"></span>
+                                </div>
+                            </div>
+                            
+                            <div class="post-content">
+                                {{ post.content }}
+                            </div>
+                            
+                            <div class="post-footer">
+                                <span class="post-time">{{ post.created_at.strftime('%H:%M') }}</span>
+                                <button class="reply-button" data-post-id="{{ post.id }}">Reply</button>
+                            </div>
+
+                            <div class="replies-container" id="replies-{{ post.id }}">
+                                <div class="loading-replies">Loading replies...</div>
+                                <div class="replies-content"></div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="no-section-results">No posts found matching "{{ query }}"</p>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<div id="replyModal" class="modal reply-modal">
+    <div class="modal-content">
+        <span class="close-modal">&times;</span>
+        <h2>Reply to Post</h2>
+        <form id="replyForm" method="post" action="{{ url_for('create_post') }}" class="reply-form">
+            <input type="hidden" id="parent_id" name="parent_id" value="">
+            <textarea id="reply_content" name="content" placeholder="Write your reply..." required></textarea>
+            <button type="submit" class="button primary">Post Reply</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function formatRemainingTime(seconds) {
+        if (seconds <= 0) {
+            return "Vanished";
+        }
+
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${secs}s`;
+        } else {
+            return `${secs}s`;
+        }
+    }
+
+    function updateRemainingTimes() {
+        const posts = document.querySelectorAll('.post:not(.vanishing)');
+
+        posts.forEach(post => {
+            const remainingSeconds = parseFloat(post.dataset.remainingSeconds);
+
+            if (remainingSeconds <= 0) {
+                post.classList.add('vanishing');
+                post.querySelector('.remaining-time').textContent = "Vanished";
+                setTimeout(() => {
+                    post.remove();
+                }, 1000);
+            } else {
+                // Decrease remaining time
+                post.dataset.remainingSeconds = remainingSeconds - 1;
+
+                const timerElement = post.querySelector('.remaining-time');
+                timerElement.textContent = formatRemainingTime(remainingSeconds - 1);
+
+                if (remainingSeconds < 900) {
+                    post.classList.add('urgent');
+                }
+            }
+        });
+    }
+
+    function loadUserStats() {
+        document.querySelectorAll('.followers-count').forEach(element => {
+            const userId = element.dataset.userId;
+            fetch(`/api/user/${userId}/followers-count`)
+                .then(response => response.json())
+                .then(data => {
+                    element.textContent = `${data.followers_count} followers · ${data.following_count} following`;
+                    
+                    const followActionsDiv = document.querySelector(`.follow-actions[data-user-id="${userId}"]`);
+                    if (followActionsDiv) {
+                        const followBtn = followActionsDiv.querySelector('.follow-btn');
+                        const unfollowBtn = followActionsDiv.querySelector('.unfollow-btn');
+                        
+                        if (data.is_following && followBtn) {
+                            const unfollowLink = document.createElement('a');
+                            unfollowLink.href = followBtn.href.replace('follow', 'unfollow');
+                            unfollowLink.className = 'button secondary unfollow-btn';
+                            unfollowLink.textContent = 'Unfollow';
+                            followActionsDiv.replaceChild(unfollowLink, followBtn);
+                        } else if (!data.is_following && unfollowBtn) {
+                            const followLink = document.createElement('a');
+                            followLink.href = unfollowBtn.href.replace('unfollow', 'follow');
+                            followLink.className = 'button primary follow-btn';
+                            followLink.textContent = 'Follow';
+                            followActionsDiv.replaceChild(followLink, unfollowBtn);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading user stats:', error);
+                    element.textContent = 'Error loading stats';
+                });
+        });
+    }
+
+    function setupReplyButtons() {
+        const modal = document.getElementById('replyModal');
+        const closeBtn = modal.querySelector('.close-modal');
+        const replyForm = document.getElementById('replyForm');
+        const parentIdInput = document.getElementById('parent_id');
+        
+        closeBtn.onclick = function() {
+            modal.style.display = "none";
+        };
+        
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        };
+        
+        document.querySelectorAll('.reply-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const postId = this.dataset.postId;
+                parentIdInput.value = postId;
+                modal.style.display = "flex";
+                document.getElementById('reply_content').focus();
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.post').forEach(post => {
+            const remainingSeconds = parseFloat(post.dataset.remainingSeconds);
+            const timerElement = post.querySelector('.remaining-time');
+            timerElement.textContent = formatRemainingTime(remainingSeconds);
+
+            if (remainingSeconds < 900) {
+                post.classList.add('urgent');
+            }
+        });
+
+        setInterval(updateRemainingTimes, 1000);
+        
+        loadUserStats();
+        
+        setupReplyButtons();
+    });
+</script>
+{% endblock %}
